@@ -90,6 +90,7 @@ def fail(msg):
 
 
 def _npm_cmd():
+    # Windows 的 npm 实际是 npm.cmd，_run 里用 shell=True 解析。
     return ["npm"]
 
 
@@ -97,14 +98,20 @@ def _node_cmd():
     return ["node"]
 
 
+def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """跨平台执行外部命令。Windows 需要 shell 解析 .cmd；POSIX 必须不用 shell。"""
+    return subprocess.run(cmd, capture_output=True, text=True,
+                          shell=IS_WINDOWS, **kwargs)
+
+
 def check_nodejs():
     try:
-        r = subprocess.run(
-            _node_cmd() + ["--version"], capture_output=True, text=True, shell=True
-        )
+        r = _run(_node_cmd() + ["--version"])
         if r.returncode != 0:
             return fail("未找到 Node.js，请从 https://nodejs.org/ 下载安装")
         ver = r.stdout.strip()
+        if not ver.startswith("v"):
+            return fail(f"无法解析 Node.js 版本号: {ver!r}")
         major = ver.lstrip("v").split(".")[0]
         if int(major) < 18:
             print(f"  [!] 建议 Node.js v18+（Vite 5 要求），当前 {ver}")
@@ -143,9 +150,7 @@ def setup_frontend():
         return True
 
     print("  正在安装前端 npm 包 ...")
-    r = subprocess.run(
-        _npm_cmd() + ["install"], cwd=os.path.join(PROJECT_ROOT, "web"), shell=True
-    )
+    r = _run(_npm_cmd() + ["install"], cwd=os.path.join(PROJECT_ROOT, "web"))
     if r.returncode != 0:
         return fail("npm install 失败")
     ok("前端依赖已安装")
